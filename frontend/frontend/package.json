@@ -1,0 +1,49 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@codemirror/lang-python": "^6.2.1",
+    "@uiw/codemirror-theme-github": "^4.23.14",
+    "@uiw/codemirror-theme-nord": "^4.23.14",
+    "@uiw/react-codemirror": "^4.23.14",
+    "axios": "^1.10.0",
+    "clsx": "^2.1.1",
+    "codemirror": "^6.0.2",
+    "jwt-decode": "^4.0.0",
+    "prettier": "^3.6.0",
+    "react": "^19.1.0",
+    "react-arborist": "^3.4.3",
+    "react-dom": "^19.1.0",
+    "react-icons": "^5.5.0",
+    "react-resizable-panels": "^3.0.3",
+    "react-router-dom": "^7.6.2",
+    "tailwind-scrollbar": "^4.0.2"
+  },
+  "files.associations": {
+    "*.css": "tailwindcss"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.25.0",
+    "@tailwindcss/vite": "^4.1.10",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.4.1",
+    "autoprefixer": "^10.4.21",
+    "babel-plugin-react-compiler": "^19.1.0-rc.2",
+    "eslint": "^9.25.0",
+    "eslint-plugin-react-hooks": "^6.0.0-rc.1",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "globals": "^16.0.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.10",
+    "vite": "^6.3.5"
+  }
+}

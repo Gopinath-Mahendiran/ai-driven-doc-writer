@@ -1,0 +1,95 @@
+@import "tailwindcss";
+@plugin "tailwind-scrollbar";
+
+@theme {
+      --font-display: "Satoshi", "sans-serif";
+      --breakpoint-3xl: 120rem;
+      --color-avocado-100: oklch(0.99 0 0);
+      --color-avocado-200: oklch(0.98 0.04 113.22);
+      --color-avocado-300: oklch(0.94 0.11 115.03);
+      --color-avocado-400: oklch(0.92 0.19 114.08);
+      --color-avocado-500: oklch(0.84 0.18 117.33);
+      --color-avocado-600: oklch(0.53 0.12 118.34);
+      --ease-fluid: cubic-bezier(0.3, 0, 0, 1);
+      --ease-snappy: cubic-bezier(0.2, 0, 0, 1);
+      --bg-gradient: radial-gradient(circle, #2B4877 30%, #0B244A 60%, #000000 90%);
+      --color-primary-text: oklch(0.98 0.01 260);
+      --color-muted-text: oklch(0.75 0.01 260);
+      --color-accent-blue: oklch(0.65 0.18 250);
+      --color-accent-purple: oklch(0.65 0.18 300);
+      --color-accent-pink: oklch(0.65 0.18 340);
+      --color-card-bg: oklch(0.25 0.01 260);
+      --color-border-dim: oklch(0.32 0.01 260);
+
+}
+@font-face {
+  font-family: 'Bauhaus-Medium'; /* Choose a name for your font */
+  src: url('./assets/BAUHAUSM.TTF') format('truetype'); 
+  font-weight: normal; /* Adjust as needed */
+  font-style: normal; /* Adjust as needed */
+}
+
+.primary-font {
+  font-family: 'Bauhaus-Medium', sans-serif;
+}
+
+.g8 {
+      background: linear-gradient(to right, transparent, #2ef2ff, transparent);
+}
+
+:root {
+  --color-light-1: #53568c;   /* Soft navy */
+  --color-light-2: #4682b4;   /* Steel blue */
+  --color-light-3: #788cb4;   /* Muted light blue */
+}
+
+.g4 {
+  background: linear-gradient(90deg, #1f3c65, #295a89);
+  color: #ffffff;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #5da0f0;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-family: 'Bauhaus-Medium', sans-serif;
+  box-shadow: 0 0 6px rgba(93, 160, 240, 0.3);
+  transition: transform 0.1s ease, box-shadow 0.2s ease, border 0.2s ease;
+}
+
+.g4:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 12px rgba(93, 160, 240, 0.6);
+  border-color: #7fc0ff;
+}
+.glow-before::before {
+    content: '';
+    position: absolute;
+    left: 40%;
+    top: 0;
+    z-index: 4;
+    height: 0.125rem;
+    width: 60%;
+    opacity: 0;
+    transition: all 0.1s;
+    background: linear-gradient(to right, transparent, #2ef2ff, transparent);
+}
+.group:hover .glow-before::before {
+    left: 1rem;
+    opacity: 0.4;
+}
+
+.glow-after::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 1rem;
+    z-index: 4;
+    height: 0.125rem;
+    width: 35%;
+    opacity: 0;
+    transition: all 0.1s;
+    background: linear-gradient(to right, transparent, #2ef2ff, transparent);
+}
+.group:hover .glow-after::after {
+    left: 60%;
+    opacity: 0.4;
+}
