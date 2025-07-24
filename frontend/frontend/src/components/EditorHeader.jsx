@@ -1,7 +1,7 @@
-import Button from "../components/Button";
-import search from "../assets/search-interface-symbol.png";
+import Button from "./Button";
 import { FaSearch } from "react-icons/fa";
 import ai from "../assets/icons8-ai-48.png";
+import { profile } from "./OAuthcallback";
 
 
 export default function EditorHeader() {
@@ -26,7 +26,7 @@ export default function EditorHeader() {
           Generate
         </Button>
         <img
-          src="/profile.jpg"
+          src={profile.profilePic || "https://via.placeholder.com/150"}
           alt="Profile"
           className="w-7 h-7 rounded-full border border-slate-400"
         />

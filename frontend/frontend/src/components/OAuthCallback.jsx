@@ -24,6 +24,9 @@ const OAuthCallback = ({}) => {
 
         localStorage.setItem(ACCESS_TOKEN, response.data.access);
         localStorage.setItem(REFRESH_TOKEN, response.data.refresh);
+        profile.email = response.data.user.email;
+        profile.name = response.data.user.name;
+        profile.profilePic = response.data.user.profile_pic;
         notifyAuthChange();
         navigate("/" );
       } catch (err) {
@@ -36,5 +39,11 @@ const OAuthCallback = ({}) => {
 
   return <div className="text-white text-center mt-10">Authenticating...</div>;
 };
+
+export const profile = {
+    email: "",
+    name: "",
+    profilePic: "",
+  };
 
 export default OAuthCallback;

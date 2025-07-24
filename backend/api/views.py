@@ -5,7 +5,7 @@ from base64 import b64decode
 from subprocess import check_output
 
 import requests
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db import IntegrityError
 from django.http import JsonResponse
@@ -26,10 +26,14 @@ from .serializers import (
     DocstringRequestSerializer,
     ListProjectsSerializer,
     UserSerializer,
+    CustomUserSerializer,
 )
+from backend.settings import GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
+from urllib.parse import unquote
 
 token = os.environ["GITHUB_TOKEN"]
 GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
+User = get_user_model()
 
 class CreateUserView(generics.CreateAPIView):
 # Create your views here.
@@ -38,6 +42,13 @@ class CreateUserView(generics.CreateAPIView):
       permission_classes = [AllowAny]
 
 
+class CurrentUserView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = CustomUserSerializer(request.user)
+        return Response(serializer.data)
+    
 class GoogleAuthCallbackView(APIView):
     def post(self, request):
 
@@ -73,29 +84,75 @@ class GoogleAuthCallbackView(APIView):
             )
             email = id_info["email"]
             name = id_info.get("name", "")
+            profile_pic = id_info.get("picture")
             user, _ = User.objects.get_or_create(email=email, defaults={"username": email.split('@')[0], "first_name": name})
-
+            if profile_pic:
+                user.profile_pic = profile_pic
+                user.save()
             # Issue your own JWT
             refresh = RefreshToken.for_user(user)
-            data ={"access": str(refresh.access_token),
-                "refresh": str(refresh),
-                "user": {
-                    "email": email,
-                    "name": name
-                }}
-            print(data)
-            return JsonResponse({
+            profile ={
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
                 "user": {
                     "email": email,
-                    "name": name
+                    "name": name,
+                    "profile_pic": profile_pic if profile_pic else "",
                 }
-            })
+            }
+            print(profile)
+            return JsonResponse(profile, status=200)
 
         except Exception as e:
             return Response({"error": "ID token verification failed", "details": str(e)}, status=400)
-        
+
+class GitHubConnectionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        code = request.data.get("code")
+        if not code:
+            return JsonResponse({"error": "No code provided"}, status=400)
+
+        try:
+            token_response = requests.post(
+                "https://github.com/login/oauth/access_token",
+                headers={"Accept": "application/json"},
+                data={"client_id": GITHUB_CLIENT_ID, "client_secret": GITHUB_CLIENT_SECRET, "code": code},
+                timeout=10
+            )
+            token_response.raise_for_status()
+        except requests.RequestException as e:
+            return JsonResponse({"error": "Failed to connect to GitHub", "details": str(e)}, status=400)
+        token_data = token_response.json()
+        access_token = token_data.get("access_token")
+        print(f"Access token: {access_token}")
+        if not access_token:
+            return JsonResponse({"error": "Failed to obtain access token"}, status=400)
+
+        try:
+            user_info_response = requests.get(
+                "https://api.github.com/user",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=10
+            )
+            user_info_response.raise_for_status()
+            user_info = user_info_response.json()
+            github_username = user_info.get("login")
+            if not github_username:
+                return JsonResponse({"error": "Failed to obtain GitHub username"}, status=400)
+        except requests.RequestException:
+            return JsonResponse({"error": "Failed to fetch user info from GitHub."}, status=400)
+
+        user = request.user
+        user.github_token = access_token
+        user.github_username = github_username
+        user.is_github_connected = True
+        user.save()
+
+        return JsonResponse({"is_github_connected": user.is_github_connected}, status=200)
+
+
 class sampleView(APIView):
     permission_classes = [IsAuthenticated]
     def get(self, request):
@@ -103,65 +160,98 @@ class sampleView(APIView):
         return JsonResponse({"message": "Hello, world!"})
         
 
-class AddProjectView(APIView):
+class GetUserRepositoriesView(APIView):
     permission_classes = [IsAuthenticated]
-    def post(self, request):
-        serializer = AddProjectSerializer(data=request.data)
-        if not serializer.is_valid():
-            return JsonResponse(serializer.errors, status=400)
 
-        name = serializer.validated_data.get('name')
-        description = serializer.validated_data.get('description', '')
-        repository_url = serializer.validated_data.get('repository_url')
-        branch = serializer.validated_data.get('branch', 'master')
-        git_token = None
-        if not name:
-            return JsonResponse({"error": "Project name is required."}, status=400)
-        if not repository_url:
-            return JsonResponse({"error": "repository_url is required."}, status=400)
-
-        owner, repo = None, None
-        if repository_url:
-            try:
-                owner, repo = parse_github_url(repository_url)
-            except Exception:
-                return JsonResponse({"error": "Invalid repository URL."}, status=400)
-            if not owner or not repo:
-                return JsonResponse({"error": "Invalid repository URL."}, status=400)
-
-        curl_command = ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}"]
-        if git_token:
-            curl_command += ["-H", f"Authorization: Bearer {git_token}"]
-        curl_command.append(f"https://api.github.com/repos/{owner}/{repo}/branches/{branch}")
-
+    def get(self, request):
+        user = request.user
+        if not user.is_github_connected:
+            return JsonResponse({"error": "User is not connected to GitHub"}, status=400)
+        # Check cache first
+        cached_repos = cache.get(f"user_repositories:{user.id}")
+        
         try:
-            status_code = check_output(curl_command, text=True).strip()
-            print(f"Status code: {status_code}")
-            if status_code != "200":
-                return JsonResponse({"error": "repository not found or branch does not exist."}, status=400)
-        except Exception as e:
-            return JsonResponse({"error": "Failed to check repository or branch.", "details": str(e)}, status=400)
-
-        try:
-            proj = project.objects.create(
-                owner=request.user,
-                name=name,
-                description=description,
-                repository_url=repository_url,
-                branch=branch
+            response = requests.get(
+                "https://api.github.com/user/repos",
+                headers={"Authorization": f"Bearer {user.github_token}"},
+                timeout=10
             )
-            return JsonResponse({
-                "id": proj.id,
-                "name": proj.name,
-                "description": proj.description,
-                "repository_url": proj.repository_url,
-                "branch": proj.branch
-            })
-        except IntegrityError as e:
-            return JsonResponse({"error": "Project with this repository URL already exists."}, status=400)
-        except Exception as e:
-            print(f"Error creating project: {e}")
-            return JsonResponse({"error": "Failed to create project.", "details": str(e)}, status=500)
+            response.raise_for_status()
+            repos = response.json()
+            data = {}
+            for repo in repos:
+                data[repo['id']] = {
+                    "name": repo['name'],
+                    "description": repo['description'],
+                    "url": repo['html_url'],
+                    "language": repo['language'],
+                    "stars": repo['stargazers_count'],
+                    "forks": repo['forks_count']
+                }
+
+            print("Repositories fetched")
+            return JsonResponse(data, safe=False)
+        except requests.RequestException as e:
+            return JsonResponse({"error": "Failed to fetch user repositories", "details": str(e)}, status=400)
+
+class GetRepoFileTreeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request , repo_name=None):
+        user = request.user
+        if not user.is_github_connected:
+            return JsonResponse({"error": "User is not connected to GitHub"}, status=400)
+        
+        repo = request.GET.get("repo_name")
+        try:
+            response = requests.get(
+                f"https://api.github.com/repos/{user.github_username}/{repo_name}/git/trees/main?recursive=1",
+                headers={"Authorization": f"Bearer {user.github_token}"},
+                timeout=10
+            )
+            response.raise_for_status()
+            tree_data = response.json()
+            tree = []
+            for item in tree_data.get("tree", []):
+                tree.append({
+                    "path": item['path'],
+                    "type": item['type']
+                })
+            return JsonResponse({"file_tree": tree}, safe=False)
+        except requests.RequestException as e:
+            return JsonResponse({"error": "Failed to fetch repository file tree", "details": str(e)}, status=400)
+
+class GetFileContentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, repo_name=None, file_path=None):
+
+        user = request.user
+        if not user.is_github_connected:
+            return JsonResponse({"error": "User is not connected to GitHub"}, status=400)
+        
+        if not file_path or not repo_name:
+            return JsonResponse({"error": "file_path and repo_name parameters are required."}, status=400)
+
+        # Decode URI-encoded file_path
+        decoded_file_path = unquote(file_path)
+        print(f"Decoded file path: {decoded_file_path}")
+        try:
+            response = requests.get(
+                f"https://api.github.com/repos/{user.github_username}/{repo_name}/contents/{decoded_file_path}",
+                headers={"Authorization": f"Bearer {user.github_token}"},
+                timeout=10
+            )
+            response.raise_for_status()
+            content_data = response.json()
+            if 'content' in content_data:
+                content_data['content'] = b64decode(content_data['content']).decode('utf-8')
+            else:
+                content_data['content'] = "No content found for this file."
+            return JsonResponse(content_data, safe=False)
+        except requests.RequestException as e:
+            return JsonResponse({"error": "Failed to fetch file content", "details": str(e)}, status=400)
+
 
 class ListProjectsView(APIView):
     permission_classes = [IsAuthenticated]
@@ -171,192 +261,111 @@ class ListProjectsView(APIView):
         projects = project.objects.filter(owner=request.user).order_by('-created_at')
         serializer = ListProjectsSerializer(projects, many=True)
         return JsonResponse(serializer.data, safe=False)
+    
+class GitlinkValidation(APIView):
+    permission_classes = [IsAuthenticated]
 
-@method_decorator(csrf_exempt, name='dispatch')
+    def get(self, request):
+        gitlink = request.GET.get("gitlink")
+        try:
+            owner, repo = parse_github_url(gitlink)
+            curl_command = curl_command = ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",f"https://api.github.com/repos/{owner}/{repo[:-4]}"]
+            status = check_output(curl_command, text=True).strip()
+        except:
+            return JsonResponse({
+                "status": 0
+            })
+        if status == "200":
+            return JsonResponse({
+                "status": 1
+            })
+        else:
+            return JsonResponse({
+                "status": 0
+            })
+
+
 class GenerateDocstringView(APIView):
     permission_classes = [IsAuthenticated]
     def post(self, request):
         serializer = DocstringRequestSerializer(data=request.data)
-        if serializer.is_valid():
-            code = serializer.validated_data.get('code')
-            file_path = serializer.validated_data.get('file_path')
-            repo_url = serializer.validated_data.get('repo_url')
-            branch = serializer.validated_data.get('branch')
+        if not serializer.is_valid():
+            return JsonResponse(serializer.errors, status=400)
 
-
-            try:
-                if not code and file_path and repo_url:
-                    file_content = cache.get(f"file_content:{repo_url}:{file_path}")
-                    if file_content:
-                        print("Cache hit for file content")
-                        code = file_content
-                    code = read_file_content(repo_url,file_path,branch)
-
-                result = generate_docstring(code)
-
-                return JsonResponse({
-                    "updated_code": result,
-                    "source": "file" if file_path else "snippet",
-                    "highlighted": True  # For frontend UI to trigger highlighting
-                })
-            except ValueError as e:
-                return Response({"error": "file_path and repo_url required"}, status=400)
-
-            except Exception as e:
-                return JsonResponse({"error": str(e)}, status=500)
-
-        return JsonResponse(serializer.errors, status=400)
-
-
-@csrf_exempt
-def gitrepo(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            repo_url = data.get('repo_url')
-            branch = data['branch'] if data['branch'] else "master" # Default to 'master' if no branch is specified
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON body."}, status=400)
-
-        if not repo_url:
-            return JsonResponse({"error": "repo_url parameter is required."}, status=400)
-        
-        data = cache.get(f"file_tree:{repo_url}:{branch}") 
-        if data :
-            print("Cache hit for file tree")
-            return JsonResponse(data)
-        
-        try:
-            data = fetch_file_tree(repo_url,branch)
-            print("Cache miss for file tree, fetching from GitHub")
-            cache.set(f"file_tree:{repo_url}:{branch}", data, timeout=60*60)
-            return JsonResponse(data)
-        except ValueError as e:
-            return JsonResponse({"error": str(e)}, status=400)
-        except requests.RequestException:
-            return JsonResponse({"error": "Failed to fetch data from GitHub."}, status=500)
-    
-    return JsonResponse({"error": "Invalid request method."}, status=405)
-
+        code = serializer.validated_data.get('code')
+        CustomizationOptions = serializer.validated_data.get('customizationOptions', {})
+        if not code:
+            return JsonResponse({"error": "Code is required."}, status=400)
+        print(f"Received code: {code[:100]}...")  # Log first 100 characters for debugging
+        # try:
+        docstring = generate_docstring(code,CustomizationOptions)
+        print(f"Generated docstring: {docstring}")
+        return JsonResponse({
+            "code": code,
+            "docstring": docstring,
+            "repo_name": serializer.validated_data.get('repo_name', ''),
+            "file_path": serializer.validated_data.get('file_path', ''),
+        }, status=200)
+        # except Exception as e:
+        #     return JsonResponse({"error": str(e)}, status=500)
 
 def parse_github_url(url):
-    match = re.match(r"https://github\.com/([^/]+)/([^/]+)", url)
-    if not match:
-        raise ValueError("Invalid GitHub repo URL.")
-    return match.group(1), match.group(2)[:-4]  # Remove '.git' from repo name
+    match = re.search(r"github\.com/([^/]+)/([^/]+)", url)
+    if match:
+        owner, repo = match.group(1), match.group(2)
+        print("Owner:", owner)
+        print("Repo:", repo)
+    else:
+        print("Invalid GitHub URL")
+    return match.group(1), match.group(2)  # Remove '.git' from repo name
 
 
 
-@csrf_exempt
-def get_repo_file_tree(owner, repo, branch, token=None):
-    file_paths=[]    
-    headers = {"Authorization": f"token {token}"} if token else {}
 
-    # Get the SHA of the default branch
-    branch_data = requests.get(
-        f"https://api.github.com/repos/{owner}/{repo}/branches/{branch}",
-        headers=headers
-    ).json() 
-    
-    sha = branch_data["commit"]['commit']["tree"]["sha"]
+def generate_docstring(code, customizationOptions):
+    endpoint = "https://models.github.ai/inference"
+    model = "openai/gpt-4.1"
+    client = OpenAI(base_url=endpoint, api_key=token)
 
-    # Get the full recursive tree
-    tree_url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/{sha}?recursive=1"
-    tree_data = requests.get(tree_url, headers=headers).json()
-    for file in tree_data.get("tree", []):
-        file_paths.append(file["path"])
-    
-    return {"file_tree": file_paths}
+    # Extract customization options
+    style = customizationOptions.get("style", "PEP257")
+    verbosity = customizationOptions.get("verbosity", "Standard")
+    audience = customizationOptions.get("audience", "Intermediate")
+    tone = customizationOptions.get("tone", "Neutral")
+    purpose = customizationOptions.get("purpose", "API Reference")
 
+    print(f"Customization options: {customizationOptions}")
 
-def fetch_file_tree(repo_url,branch):
+    # Build system prompt dynamically
+    system_prompt = (
+        f"You are a senior Python developer and documentation expert.\n"
+        f"You follow the {style} docstring standard.\n"
+        f"Verbosity level: {verbosity}.\n"
+        f"Target audience: {audience}.\n"
+        f"Tone: {tone}.\n"
+        f"Documentation purpose: {purpose}.\n"
+        f"Your job is to generate only clean Python docstrings.\n"
+        f"Include file-level module docstring.\n"
+        f"Do not explain, comment, or write anything outside of the docstrings.\n"
+        f"Do not include conversational text or markdown formatting.\n"
+    )
 
-    owner, repo = parse_github_url(repo_url)
-    tree = get_repo_file_tree(owner, repo, branch)  # Remove '.git' from repo name
-    return tree
-
-
-@csrf_exempt
-def get_file_content(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)  
-            file_path = data.get('file_path')
-            repo_url = data.get('repo_url')
-            branch = data['branch'] if data['branch'] else "master" # Default to 'master' if no branch is specified
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON body."}, status=400)
-        return JsonResponse(read_file_content(repo_url, file_path, branch))
-    return JsonResponse({"error": "Invalid request method."}, status=405)
-
-
-       
-
-
-def read_file_content(repo_url, file_path, branch):
-        if  not file_path or  not repo_url:
-            return {"error": "file_path and repo_url parameters are required."}
-        
-        data = cache.get(f"file_content:{repo_url}:{branch}:{file_path}")
-        if data:
-            print("Cache hit for file content")
-            return JsonResponse(data, safe=False)
-
-        owner, repo = parse_github_url(repo_url)
-      #   headers = {"Authorization": f"token {data.get('token')}"}
-        
-        file_content_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_path}?ref={branch}"
-        response = requests.get(file_content_url, headers={})
-        
-        if response.status_code == 200:
-            content_data = response.json()
-            if 'content' in content_data:
-
-                content_data['content'] = b64decode(content_data['content']).decode('utf-8')
-            else:
-                content_data['content'] = "No content found for this file."
-            cache.set(f"file_content:{repo_url}:{branch}:{file_path}", content_data['content'], timeout=60*60)  # Cache for 1 hour
-            return content_data['content']
-        else:
-            return {"error": "Failed to fetch file content."}
-
-       
-        
-
-def generate_docstring(code):
-        
-        
-        endpoint = "https://models.github.ai/inference"
-        model = "openai/gpt-4.1"
-        client = OpenAI(base_url=endpoint, api_key=token)
-        response = client.chat.completions.create(
-            messages = [
-        {
-        "role": "system",
-        "content": 
-            "You are a senior Python developer and documentation expert. "
-            "You strictly follow PEP 257 and PEP 8 docstring standards. "
-            "You generate ONLY clean Python docstrings and a file-level module docstring. "
-            "Do NOT explain or comment on the code. "
-            "Do NOT write anything outside of the docstrings. "
-            "Do NOT include conversational text or markdown formatting."
-        
-        },
-        {
-        "role": "user",
-        "content": 
-            "Add docstrings ONLY to all functions, classes, and the module in the following code. "
-            "Return ONLY the updated code with embedded docstrings in-place. "
-            "Avoid extra commentary or explanation outside the code.\n\n"
-            f"{code}"
-        
-    }
-],
-            temperature=0.7,
-            top_p=1.0,
-            model= model
-        )
-        return response.choices[0].message.content.strip()
-
-
+    response = client.chat.completions.create(
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": (
+                    "Add docstrings ONLY to all functions, classes, and the module in the following code. "
+                    "Return ONLY the updated code with embedded docstrings in-place. "
+                    "Avoid extra commentary or explanation outside the code.\n\n"
+                    f"{code}"
+                ),
+            },
+        ],
+        temperature=0.7,
+        top_p=1.0,
+        model=model
+    )
+    return response.choices[0].message.content.strip()
 

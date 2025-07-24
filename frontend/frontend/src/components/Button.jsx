@@ -5,7 +5,8 @@ const Button = ({
   children,
   href,
   containerClassName,
-  onClick
+  onClick,
+  disabled = true,
 }) => {
   const Inner = () => (
     <>
@@ -46,6 +47,7 @@ const Button = ({
         containerClassName,
       )}
       onClick={onClick}
+
     >
       <Inner />
     </button>

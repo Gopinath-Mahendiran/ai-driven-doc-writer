@@ -16,6 +16,7 @@ const Navbar = () => {
   const handleLogout = () => {
     localStorage.removeItem(ACCESS_TOKEN);
     localStorage.removeItem(REFRESH_TOKEN);
+    localStorage.removeItem("github_authenticated");
     setAuth(false);
     navigate("/");
     // window.location.reload();

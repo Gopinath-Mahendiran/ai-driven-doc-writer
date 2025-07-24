@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @plugin "tailwind-scrollbar";
 
+
+
 @theme {
       --font-display: "Satoshi", "sans-serif";
       --breakpoint-3xl: 120rem;
@@ -29,6 +31,13 @@
   font-style: normal; /* Adjust as needed */
 }
 
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;     /* Firefox */
+}
 .primary-font {
   font-family: 'Bauhaus-Medium', sans-serif;
 }

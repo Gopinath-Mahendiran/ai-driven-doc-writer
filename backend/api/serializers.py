@@ -1,12 +1,13 @@
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
-from rest_framework import generics
+from .models import project
+User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
 
       class Meta:
             model = User
-            fields = ['id','username','password',"email"]
+            fields = ['id','username','password',"email",'profile_pic']
             extra_kwargs = {'password' : {'write_only' : True}}
 
       def create(self,validated_data):
@@ -18,26 +19,26 @@ class DocstringRequestSerializer(serializers.Serializer):
     file_path = serializers.CharField(required=False)
     repo_url = serializers.CharField(required=False)
     branch = serializers.CharField(required=False)
+    customizationOptions = serializers.DictField(
+        child=serializers.CharField(), required=False, allow_null=True
+    )
 
     def validate(self, data):
         code = data.get("code")
         file_path = data.get("file_path")
-        repo_url = data.get("repo_url")
+        repo_name = data.get("repo_name")
         branch = data.get("branch")
+        customizationOptions = data.get("customizationOptions", {})
 
         if not code and not file_path:
             raise serializers.ValidationError("Provide either 'code' or 'file_path'.")
-
-        if file_path:
-            if not repo_url or not branch:
-                raise serializers.ValidationError("If 'file_path' is provided, 'url' and 'branch' are required.")
 
         return data
     
 class AddProjectSerializer(serializers.Serializer):
 
     class Meta:
-        model = User
+        model = project
         fields = ['name', 'description', 'repository_url', 'branch']
     name = serializers.CharField(max_length=255)
     description = serializers.CharField(required=False, allow_blank=True)
@@ -53,7 +54,7 @@ class AddProjectSerializer(serializers.Serializer):
     
 class ListProjectsSerializer(serializers.ModelSerializer):
     class Meta:
-        model = User
+        model = project
         fields = ['id', 'name', 'repository_url', 'branch', 'created_at', 'updated_at']
 
     id = serializers.IntegerField(read_only=True)
@@ -63,3 +64,7 @@ class ListProjectsSerializer(serializers.ModelSerializer):
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
 
+class CustomUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'username', 'github_username', 'is_github_connected']
