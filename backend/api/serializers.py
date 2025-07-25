@@ -40,6 +40,15 @@ class AddProjectSerializer(serializers.Serializer):
     class Meta:
         model = project
         fields = ['name', 'description', 'repository_url', 'branch']
+
+        def sample(self):
+            return {
+                'name': 'Sample Project',
+                'description': 'This is a sample project description.',
+                'repository_url': 'https://github.com/sample/sample-project',
+                'branch': 'main'
+            }
+
     name = serializers.CharField(max_length=255)
     description = serializers.CharField(required=False, allow_blank=True)
     repository_url = serializers.URLField(max_length=255, required=False, allow_blank=False)
