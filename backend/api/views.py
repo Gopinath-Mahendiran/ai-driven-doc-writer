@@ -30,7 +30,7 @@ from .serializers import (
 )
 from backend.settings import GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
 from urllib.parse import unquote
-
+import ast
 token = os.environ["GITHUB_TOKEN"]
 GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
 User = get_user_model()
@@ -227,6 +227,7 @@ class GetFileContentView(APIView):
     def get(self, request, repo_name=None, file_path=None):
 
         user = request.user
+        symbols = list()
         if not user.is_github_connected:
             return JsonResponse({"error": "User is not connected to GitHub"}, status=400)
         
@@ -248,6 +249,10 @@ class GetFileContentView(APIView):
                 content_data['content'] = b64decode(content_data['content']).decode('utf-8')
             else:
                 content_data['content'] = "No content found for this file."
+            
+            symbols = GenerateSymbolTable(content_data['content'])
+
+            content_data['symbols'] = symbols
             return JsonResponse(content_data, safe=False)
         except requests.RequestException as e:
             return JsonResponse({"error": "Failed to fetch file content", "details": str(e)}, status=400)
@@ -298,7 +303,7 @@ class GenerateDocstringView(APIView):
             return JsonResponse({"error": "Code is required."}, status=400)
         print(f"Received code: {code[:100]}...")  # Log first 100 characters for debugging
         # try:
-        docstring = generate_docstring(code,CustomizationOptions)
+        docstring= generate_docstring(code,CustomizationOptions)
         print(f"Generated docstring: {docstring}")
         return JsonResponse({
             "code": code,
@@ -322,10 +327,11 @@ def parse_github_url(url):
 
 
 
-def generate_docstring(code, customizationOptions):
+async def generate_docstring(code, customizationOptions):
     endpoint = "https://models.github.ai/inference"
     model = "openai/gpt-4.1"
     client = OpenAI(base_url=endpoint, api_key=token)
+    
 
     # Extract customization options
     style = customizationOptions.get("style", "PEP257")
@@ -336,6 +342,7 @@ def generate_docstring(code, customizationOptions):
 
     print(f"Customization options: {customizationOptions}")
 
+    
     # Build system prompt dynamically
     system_prompt = (
         f"You are a senior Python developer and documentation expert.\n"
@@ -369,3 +376,35 @@ def generate_docstring(code, customizationOptions):
     )
     return response.choices[0].message.content.strip()
 
+
+def GenerateSymbolTable(code):
+    """
+    Generate a symbol table from the provided code.
+    This function parses the code and extracts classes, functions, and their attributes.
+    """
+    tree = ast.parse(code)
+    symbols = []
+
+    def Traversal(node, parent_list):
+        if isinstance(node, ast.ClassDef):
+            class_info = {
+                "type": "class",
+                "name": node.name,
+                "line": node.lineno,
+                "children": []
+            }
+            for item in node.body:
+                Traversal(item, class_info["children"])
+            parent_list.append(class_info)
+        elif isinstance(node, ast.FunctionDef):
+            parent_list.append({
+                "type": "function",
+                "name": node.name,
+                "line": node.lineno
+            })
+        elif hasattr(node, 'body'):
+            for item in getattr(node, 'body', []):
+                Traversal(item, parent_list)
+
+    Traversal(tree, symbols)
+    return symbols
