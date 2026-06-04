@@ -37,6 +37,7 @@ const initialData = [
 
 export default function FileTree({ onFileSelect, initialData = initialData }) {
   const [selected, setSelected] = useState(null);
+
   const onCreate = ({ parentId, index, type }) => {};
   const onRename = ({ id, name }) => {};
   const onMove = ({ dragIds, parentId, index }) => {};
@@ -82,7 +83,7 @@ export default function FileTree({ onFileSelect, initialData = initialData }) {
       openByDefault={false}
       height={1000}
       width={220}
-      className="h-full max-h-full w-full text-white text-sm overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900"
+      className="h-full max-h-full w-full text-white text-sm overflow-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900"
     >
       {({ node, style, dragHandle }) => (
         <div

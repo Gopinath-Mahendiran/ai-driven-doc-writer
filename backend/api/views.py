@@ -1,7 +1,7 @@
 import json
 import os
 import re
-from base64 import b64decode
+from base64 import b64decode, b64encode
 from subprocess import check_output
 
 import requests
@@ -19,10 +19,10 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+import google.generativeai as genai
 
 from .models import project
 from .serializers import (
-    AddProjectSerializer,
     DocstringRequestSerializer,
     ListProjectsSerializer,
     UserSerializer,
@@ -31,6 +31,11 @@ from .serializers import (
 from backend.settings import GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
 from urllib.parse import unquote
 import ast
+import asyncio
+from  dotenv import load_dotenv
+
+load_dotenv()
+
 token = os.environ["GITHUB_TOKEN"]
 GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
 User = get_user_model()
@@ -303,7 +308,7 @@ class GenerateDocstringView(APIView):
             return JsonResponse({"error": "Code is required."}, status=400)
         print(f"Received code: {code[:100]}...")  # Log first 100 characters for debugging
         # try:
-        docstring= generate_docstring(code,CustomizationOptions)
+        docstring = asyncio.run(generate_docstring(code, CustomizationOptions))
         print(f"Generated docstring: {docstring}")
         return JsonResponse({
             "code": code,
@@ -328,11 +333,23 @@ def parse_github_url(url):
 
 
 async def generate_docstring(code, customizationOptions):
-    endpoint = "https://models.github.ai/inference"
-    model = "openai/gpt-4.1"
-    client = OpenAI(base_url=endpoint, api_key=token)
+    """
+    Generate docstrings using Google Generative AI (Gemini).
     
-
+    Args:
+        code (str): Python code to generate docstrings for
+        customizationOptions (dict): Customization options for docstring generation
+        
+    Returns:
+        str: Generated code with docstrings
+    """
+    # Initialize Google Generative AI
+    api_key = os.environ.get("GOOGLE_API_KEY")
+    if not api_key:
+        raise ValueError("GOOGLE_API_KEY is not set in environment variables.")
+    
+    genai.configure(api_key=api_key)
+    
     # Extract customization options
     style = customizationOptions.get("style", "PEP257")
     verbosity = customizationOptions.get("verbosity", "Standard")
@@ -342,7 +359,6 @@ async def generate_docstring(code, customizationOptions):
 
     print(f"Customization options: {customizationOptions}")
 
-    
     # Build system prompt dynamically
     system_prompt = (
         f"You are a senior Python developer and documentation expert.\n"
@@ -357,24 +373,23 @@ async def generate_docstring(code, customizationOptions):
         f"Do not include conversational text or markdown formatting.\n"
     )
 
-    response = client.chat.completions.create(
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": (
-                    "Add docstrings ONLY to all functions, classes, and the module in the following code. "
-                    "Return ONLY the updated code with embedded docstrings in-place. "
-                    "Avoid extra commentary or explanation outside the code.\n\n"
-                    f"{code}"
-                ),
-            },
-        ],
-        temperature=0.7,
-        top_p=1.0,
-        model=model
+    # Create the generative model
+    model = genai.GenerativeModel(
+        model_name="gemini-2.0-flash",
+        system_instruction=system_prompt
     )
-    return response.choices[0].message.content.strip()
+
+    user_message = (
+        "Add docstrings ONLY to all functions, classes, and the module in the following code. "
+        "Return ONLY the updated code with embedded docstrings in-place. "
+        "Avoid extra commentary or explanation outside the code.\n\n"
+        f"{code}"
+    )
+
+    # Generate content
+    response = model.generate_content(user_message)
+    
+    return response.text.strip()
 
 
 def GenerateSymbolTable(code):
@@ -400,6 +415,15 @@ def GenerateSymbolTable(code):
             parent_list.append({
                 "type": "function",
                 "name": node.name,
+                "line": node.lineno,
+                "children": []
+            })
+            for item in node.body:
+                Traversal(item, parent_list[-1]["children"])
+        elif isinstance(node, ast.Constant):
+            parent_list.append({
+                "type": "constant",
+                "value": node.value,
                 "line": node.lineno
             })
         elif hasattr(node, 'body'):
@@ -408,3 +432,158 @@ def GenerateSymbolTable(code):
 
     Traversal(tree, symbols)
     return symbols
+
+
+def commit_changes_to_github(github_token, github_username, repo_name, file_path, new_content, commit_message, branch="main"):
+    """
+    Commit changes to a file in a GitHub repository using the GitHub REST API.
+    
+    Args:
+        github_token (str): GitHub personal access token
+        github_username (str): GitHub username
+        repo_name (str): Repository name
+        file_path (str): Path to the file in the repository
+        new_content (str): New content of the file
+        commit_message (str): Commit message
+        branch (str): Target branch (default: main)
+    
+    Returns:
+        dict: Response from GitHub API containing commit info or error details
+    """
+    try:
+        # Get the current file SHA (needed for updates)
+        get_url = f"https://api.github.com/repos/{github_username}/{repo_name}/contents/{file_path}"
+        headers = {
+            "Authorization": f"Bearer {github_token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28"
+        }
+        
+        # Try to get existing file
+        get_response = requests.get(
+            get_url,
+            params={"ref": branch},
+            headers=headers,
+            timeout=10
+        )
+        
+        sha = None
+        if get_response.status_code == 200:
+            sha = get_response.json().get("sha")
+            print(f"Found existing file with SHA: {sha}")
+        elif get_response.status_code != 404:
+            return {
+                "success": False,
+                "error": f"Failed to fetch file info: {get_response.status_code}",
+                "details": get_response.text
+            }
+        
+        # Encode the new content to base64
+        content_encoded = b64encode(new_content.encode('utf-8')).decode('utf-8')
+        
+        # Prepare the commit payload
+        payload = {
+            "message": commit_message,
+            "content": content_encoded,
+            "branch": branch
+        }
+        
+        if sha:
+            payload["sha"] = sha
+        
+        # Commit to GitHub
+        commit_url = f"https://api.github.com/repos/{github_username}/{repo_name}/contents/{file_path}"
+        commit_response = requests.put(
+            commit_url,
+            json=payload,
+            headers=headers,
+            timeout=10
+        )
+        
+        if commit_response.status_code in [200, 201]:
+            commit_data = commit_response.json()
+            return {
+                "success": True,
+                "message": "Changes committed successfully",
+                "commit": {
+                    "sha": commit_data.get("commit", {}).get("sha"),
+                    "url": commit_data.get("commit", {}).get("html_url"),
+                    "file_url": commit_data.get("content", {}).get("html_url")
+                }
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"Failed to commit: {commit_response.status_code}",
+                "details": commit_response.text
+            }
+    
+    except requests.RequestException as e:
+        return {
+            "success": False,
+            "error": "Request failed",
+            "details": str(e)
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": "An error occurred",
+            "details": str(e)
+        }
+
+
+class GitCommitView(APIView):
+    """
+    API endpoint for committing changes to GitHub repositories.
+    
+    POST request should include:
+    - repo_name (str): Name of the repository
+    - file_path (str): Path to the file in the repository
+    - content (str): New file content
+    - commit_message (str): Commit message
+    - branch (str, optional): Target branch (default: main)
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        user = request.user
+        
+        # Verify user is connected to GitHub
+        if not user.is_github_connected:
+            return JsonResponse(
+                {"error": "User is not connected to GitHub"},
+                status=400
+            )
+        
+        # Extract request data
+        repo_name = request.data.get("repo_name")
+        file_path = request.data.get("file_path")
+        new_content = request.data.get("content")
+        commit_message = request.data.get("commit_message")
+        branch = request.data.get("branch", "main")
+        
+        # Validate required fields
+        if not all([repo_name, file_path, new_content, commit_message]):
+            return JsonResponse(
+                {
+                    "error": "Missing required fields",
+                    "required": ["repo_name", "file_path", "content", "commit_message"]
+                },
+                status=400
+            )
+        
+        # Execute commit
+        result = commit_changes_to_github(
+            github_token=user.github_token,
+            github_username=user.github_username,
+            repo_name=repo_name,
+            file_path=file_path,
+            new_content=new_content,
+            commit_message=commit_message,
+            branch=branch
+        )
+        
+        if result["success"]:
+            return JsonResponse(result, status=201)
+        else:
+            return JsonResponse(result, status=400)

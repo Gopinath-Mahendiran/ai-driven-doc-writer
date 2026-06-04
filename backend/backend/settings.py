@@ -30,7 +30,11 @@ SECRET_KEY = "django-insecure-nma=xi6x2p-crjg^ifqqkapyu1qjd0l=+wn)-rijk_o%$!k3w_
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = [
+    "your-backend.onrender.com",
+    "localhost",
+    "127.0.0.1",
+]
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
@@ -47,6 +51,20 @@ SIMPLE_JWT = {
 }
 
 # Application definition
+
+CORS_ALLOWED_ORIGINS = [
+    "https://your-app.vercel.app",
+    "http://localhost:5173",   # Vite dev server
+    "http://localhost:3000",   # CRA dev server
+]
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = [
+    "authorization",
+    "content-type",
+    "x-csrftoken",
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -68,9 +86,12 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'social_django',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # must be FIRST
+    'django.middleware.common.CommonMiddleware',
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -224,6 +245,6 @@ REST_USE_JWT = True
 
 
 GITHUB_CLIENT_ID = "Ov23liQABI3d2R417DNz"
-GITHUB_CLIENT_SECRET = "6bf4d4cc25126acd7bf694162b033669875eaede"
+GITHUB_CLIENT_SECRET = "bde42d5617641db95fa13664501dffa67451bfad"
 
 AUTH_USER_MODEL = 'api.CustomUser'

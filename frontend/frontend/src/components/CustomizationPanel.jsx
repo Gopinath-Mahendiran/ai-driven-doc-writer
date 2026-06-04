@@ -14,7 +14,7 @@ function CustomizationPanel({ _docStyle, _verbosity, _audience,_tone, _purpose }
   };
 
   return (
-    <div className="customization-panel p-4 text-white rounded-xl shadow-lg w-[290px] border border-gray-700 z-50">
+    <div className="customization-panel p-4 text-white rounded-xl shadow-lg border border-gray-700 z-50 bg-[#1e293b]">
       <div className="option-group">
         <label htmlFor="theme-select" className="block mb-2 text-xs font-medium text-gray-300">Documentation Style</label>
         <select
@@ -132,5 +132,5 @@ function CustomizationPanel({ _docStyle, _verbosity, _audience,_tone, _purpose }
 
     </div>
   );
-}
+} 
 export default CustomizationPanel;

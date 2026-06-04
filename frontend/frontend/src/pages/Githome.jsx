@@ -99,15 +99,10 @@ const Githome = () => {
           <input 
             type="text"
             placeholder="Search by repo name or description..."
-            className="w-full sm:w-[90%] bg-[#1e293b] text-white placeholder-slate-400 border border-slate-600 rounded-xl px-4 py-4"
+            className="w-[290px] sm:w-[100%] bg-[#1e293b] text-white placeholder-slate-400 border border-slate-600 rounded-xl px-4 py-4"
             onChange={(e) => setSearchTerm(e.target.value)}
             value={searchTerm}
           />
-          <div className="flex flex-wrap gap-2 justify-center mt-4 sm:mt-0">
-            {['All', 'Python', 'JavaScript', 'TypeScript', 'CSS', 'Java'].map(lang => (
-              <button key={lang} className="px-3 py-1 text-sm rounded-full border border-slate-500 text-white bg-black/20 hover:bg-slate-700 transition">{lang}</button>
-            ))}
-          </div>
         </div>
         <div className="w-full flex items-center  sm:grid-cols-2 justify-center mt-4">
           <div className="w-full grid sm:w-[90%] sm:grid-cols-4 gap-6 mt-8 px-4">

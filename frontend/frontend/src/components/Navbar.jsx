@@ -50,7 +50,7 @@ const Navbar = () => {
             </Link>
           </li>
           <li>
-            {auth ? (
+            {auth ? ( 
               <button
                 className="ml-4 hover:backdrop-blur-sm hover:bg-white/10 hover:border hover:border-blue-400 hover:rounded-full px-4 py-2"
                 onClick={handleLogout}
