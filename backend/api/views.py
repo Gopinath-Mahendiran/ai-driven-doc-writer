@@ -68,7 +68,7 @@ class GoogleAuthCallbackView(APIView):
             "code": code,
             "client_id": "526839746953-b15518oosomdgi87u0je0v42g6dohj0r.apps.googleusercontent.com",
             "client_secret": "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",
-            "redirect_uri": "https://ai-driven-doc-writer-hubn-3m5re202t.vercel.app/oauth/callback/",
+            "redirect_uri": "https://ai-driven-doc-writer-hubn.vercel.app/oauth/callback/",
             "grant_type": "authorization_code",
         }
 
