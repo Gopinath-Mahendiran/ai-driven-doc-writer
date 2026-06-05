@@ -8,7 +8,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Sample from "./pages/sample";
 import Start from "./pages/Doceditor";
 import EditorLayout from "./layouts/EditorLayout";
-import Githome from "./pages/githome";
+import Githome from "./pages/Githome";
 import GitOAuth from "./pages/Git-OAuth";
 
 function App() {
