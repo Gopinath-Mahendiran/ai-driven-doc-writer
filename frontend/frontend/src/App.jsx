@@ -3,7 +3,7 @@ import 'react-tooltip/dist/react-tooltip.css'
 import MainLayout from "./layouts/MainLayout";
 import Home from "./pages/Home";
 import Signin from "./pages/Login";
-import OAuthCallback from "./components/OAuthcallback";
+import OAuthCallback from "./components/OAuthCallback";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Sample from "./pages/sample";
 import Start from "./pages/Doceditor";
