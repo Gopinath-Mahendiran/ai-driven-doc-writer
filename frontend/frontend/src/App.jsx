@@ -7,7 +7,7 @@ import OAuthCallback from "./components/OAuthCallback";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Sample from "./pages/sample";
 import Start from "./pages/Doceditor";
-import EditorLayout from "./layouts/editorLayout";
+import EditorLayout from "./layouts/EditorLayout";
 import Githome from "./pages/githome";
 import GitOAuth from "./pages/Git-OAuth";
 
