@@ -7,7 +7,7 @@ import { GoSidebarCollapse ,GoSidebarExpand } from "react-icons/go";
 import convertToNestedTree from '../utils/convetToNestedTree';
 import api from "../api";
 import { set as idbSet, get as idbGet, clear as idbClear, set } from 'idb-keyval';
-import CustomizationPanel from "../components/CustomizationPAnel";
+import CustomizationPanel from "../components/CustomizationPanel";
 import SymbolSheet from "../components/SymbolSheet";
 import { IoIosArrowDown } from "react-icons/io";
 import Button from "../components/Button";
