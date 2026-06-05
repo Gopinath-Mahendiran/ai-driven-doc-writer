@@ -12,3 +12,7 @@ google-generativeai
 google-auth
 requests
 gunicorn
+django-allauth
+dj-rest-auth
+social-auth-app-django
+django-redis
