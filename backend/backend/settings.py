@@ -52,12 +52,15 @@ SIMPLE_JWT = {
 
 # Application definition
 
-CORS_ALLOWED_ORIGINS = [
-    "https://your-app.vercel.app",
-    "http://localhost:5173",   # Vite dev server
-    "http://localhost:3000",   # CRA dev server
-]
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:5173",   # Vite dev server
+#     "http://localhost:3000",   # CRA dev server
+# ]
 
+
+CORS_ALLOWED_ORIGINS=[
+    'https://ai-driven-doc-writer-hubn-3m5re202t.vercel.app',    
+]
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_HEADERS = [
